@@ -9,6 +9,13 @@ CREATE TABLE login(
     PRIMARY KEY(id)
 );
 
+CREATE TABLE publicKeys(
+	`from` VARCHAR(256) NOT NULL,
+    `to` VARCHAR(256) NOT NULL,
+    `pubKey` VARCHAR(4096) NOT NULL,
+    PRIMARY KEY (`from`, `to`)
+);
+
 -- CREATE TABLE ips(
 --     userId INT NOT NULL,
 --     ip VARCHAR(22) NOT NULL,

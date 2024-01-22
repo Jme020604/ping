@@ -3,22 +3,29 @@ package messageHandeler
 import (
 	"bufio"
 	"chat/server/db"
+	"crypto"
+	"crypto/rsa"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"net"
 	"os"
 	"strings"
 	"sync"
+	"time"
 )
 
 type msg struct {
-	From     string `json:"from"`
-	To       string `json:"to"`
-	Time     string `json:"timeSent"`
-	Version  string `json:"version"`
-	System   int    `json:"system"`
-	Value    string `json:"value"`
-	CheckSum string `json:"checkSum"`
+	SessionId string `json:"SessionId"`
+	From      string `json:"from"`
+	To        string `json:"to"`
+	Time      string `json:"timeSent"`
+	Version   string `json:"version"`
+	System    int    `json:"system"`
+	Value     string `json:"value"`
+	Hash      string `json:"hash"`
+	Signature string `json:"Signature"`
 }
 
 type client struct {
@@ -61,8 +68,27 @@ func HandleConnection(conn net.Conn, wg *sync.WaitGroup) {
 			println("Got system message")
 			handleSystemMessage(receivedMsg, conn)
 		} else {
-			id := db.GetUserId(receivedMsg.To)
-			sendThru(connected[id], receivedMsg)
+
+			hash := sha256.New()
+			hash.Write([]byte(receivedMsg.From))
+			hashInBytes := hash.Sum(nil)
+			hashString := hex.EncodeToString(hashInBytes)
+
+			pubKey := db.GetPubKey(hashString)
+
+			verifySignature(pubKey)
+
+			receiverId := db.GetUserId(receivedMsg.To)
+
+			val, ok := connected[receiverId]
+			if ok {
+				fmt.Println("user Found")
+				sendThru(val, receivedMsg)
+			} else {
+				db.UploadMsg(db.Msg(receivedMsg))
+			}
+			// id := db.GetUserId(receivedMsg.To)
+			// sendThru(connected[id], receivedMsg)
 			fmt.Printf(" %+v\n", receivedMsg.Value)
 		}
 
@@ -85,25 +111,87 @@ func sendThru(conn net.Conn, message msg) {
 }
 
 func handleSystemMessage(messageReceived msg, conn net.Conn) {
-	if messageReceived.System == 1 {
+	if messageReceived.System == 10 {
 		id := db.GetUserId(messageReceived.From)
 
 		fmt.Println("Got id: ", id)
 
 		connected[id] = conn
 
-		receiverId := db.GetUserId(messageReceived.To)
+		unreadMessage := db.CheckMsg(messageReceived.From)
 
-		val, ok := connected[receiverId]
+		fmt.Println(unreadMessage)
+
+		if unreadMessage {
+			messages := db.GetMessage(messageReceived.From)
+
+			time := fmt.Sprint(time.Now().Format("1-2-2006 15:4:5"))
+			content := "You have unread messages, next messages will be the saved ones:"
+
+			input := fmt.Sprint(messageReceived.From, messageReceived.To, time, "1.0", 3, content)
+			hash := sha256.New()
+			hash.Write([]byte(input))
+			hashInBytes := hash.Sum(nil)
+			hashString := hex.EncodeToString(hashInBytes)
+
+			unread := msg{
+				From:     messageReceived.From,
+				To:       messageReceived.To,
+				Time:     time,
+				Version:  "1.0",
+				System:   20,
+				Value:    content,
+				CheckSum: hashString,
+			}
+
+			sendThru(conn, unread)
+
+			for _, messageInList := range messages {
+				sendThru(conn, msg(messageInList))
+			}
+
+			db.DeleteMsgs(messageReceived.From)
+		} else {
+			time := fmt.Sprint(time.Now().Format("1-2-2006 15:4:5"))
+			content := "No unread messages"
+
+			input := fmt.Sprint(messageReceived.From, messageReceived.To, time, "1.0", 21, content)
+			hash := sha256.New()
+			hash.Write([]byte(input))
+			hashInBytes := hash.Sum(nil)
+			hashString := hex.EncodeToString(hashInBytes)
+
+			unread := msg{
+				From:     messageReceived.From,
+				To:       messageReceived.To,
+				Time:     time,
+				Version:  "1.0",
+				System:   21,
+				Value:    content,
+				CheckSum: hashString,
+			}
+
+			sendThru(conn, unread)
+		}
+
+	} else if messageReceived.System == 30 || messageReceived.System == 31 {
+		id := db.GetUserId(messageReceived.To)
+
+		val, ok := connected[id]
 		if ok {
-			fmt.Println("user Found")
+			fmt.Println("user found and online")
 			sendThru(val, messageReceived)
 		} else {
 			db.UploadMsg(db.Msg(messageReceived))
 		}
-
+	} else if messageReceived.System == 5 {
+		db.UploadPubKey(db.Msg(messageReceived))
 	} else {
 		fmt.Println("Error while handeling system message")
 		os.Exit(1)
 	}
+}
+
+func verifySignature(publicKey *rsa.PublicKey, hash, signature []byte) error {
+	return rsa.VerifyPKCS1v15(publicKey, crypto.SHA256, hash, signature)
 }
