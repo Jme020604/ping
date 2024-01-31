@@ -1,3 +1,4 @@
+// this part of the program is for the rsa part
 package clientRsa
 
 import (
@@ -11,8 +12,10 @@ import (
 	"os"
 )
 
+// define golabal vars
 var readBuff = make([]byte, 4096)
 
+// this function generates rsa certs
 func GenerateRsa(user string) (crypto.PublicKey, *rsa.PrivateKey) {
 	fileNamePriv := fmt.Sprintf("./%s.rsa", user)
 	fileNamePub := fmt.Sprintf("./%s.rsa.pub", user)
@@ -63,6 +66,7 @@ func GenerateRsa(user string) (crypto.PublicKey, *rsa.PrivateKey) {
 	return pubPEM, key
 }
 
+// this fucntion reads the right private key from the file
 func ReadPrivateKeyFromFile(file string) *rsa.PrivateKey {
 	// Read the private key file
 	if _, err := os.Stat(file); err == nil {
@@ -90,6 +94,40 @@ func ReadPrivateKeyFromFile(file string) *rsa.PrivateKey {
 		}
 
 		return privateKey
+	} else {
+		log.Fatal("error with getting rsa")
+	}
+	return nil
+}
+
+// this fucntion reads the right public key from the file
+func ReadPublicKeyFromFile(file string) *rsa.PublicKey {
+	// Read the private key file
+	if _, err := os.Stat(file); err == nil {
+		// file exists
+		f, err := os.Open(file)
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		defer f.Close()
+
+		n, err := f.Read(readBuff)
+		if err != nil {
+			log.Fatal(err)
+		}
+		block, _ := pem.Decode([]byte(readBuff[:n]))
+		if block == nil {
+			log.Fatal("failed to decode PEM block from private key file")
+		}
+
+		// Parse the DER-encoded private key
+		publicKey, err := x509.ParsePKCS1PublicKey(block.Bytes)
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		return publicKey
 	} else {
 		log.Fatal("error with getting rsa")
 	}

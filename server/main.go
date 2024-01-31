@@ -1,3 +1,4 @@
+// this is the main part of the program and starts all the neccairy part
 package main
 
 import (
@@ -7,11 +8,13 @@ import (
 	"sync"
 )
 
+// define glob vars
 var wg sync.WaitGroup
 
+// this function starts the listening server
 func server(ip net.IP) {
 	fmt.Println("starting server for listening")
-	adress := fmt.Sprint(ip, ":8080")
+	adress := fmt.Sprint(ip, ":42069")
 	listener, err := net.Listen("tcp", adress)
 	if err != nil {
 		fmt.Println("Error starting server:", err)
@@ -31,11 +34,12 @@ func server(ip net.IP) {
 		}
 
 		wg.Add(1)
-		go messageHandeler.HandleConnection(conn, &wg)
+		go messageHandeler.HandleConnection(conn, &wg) // yes yes each and every user gets its own thread
 	}
 
 }
 
+// this function checks for the servers ip to start listening on
 func checkIp() net.IP {
 	conn, err := net.Dial("udp", "8.8.8.8:80")
 	if err != nil {

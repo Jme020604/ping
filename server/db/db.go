@@ -1,3 +1,4 @@
+// this part of the program is for handeling the database
 package db
 
 import (
@@ -13,18 +14,21 @@ import (
 	"github.com/go-sql-driver/mysql"
 )
 
+// yes yes for consistancy there is the same struct again
 type Msg struct {
-	SessionId string `json:"SessionId"`
-	From      string `json:"from"`
-	To        string `json:"to"`
-	Time      string `json:"timeSent"`
-	Version   string `json:"version"`
-	System    int    `json:"system"`
-	Value     string `json:"value"`
-	Hash      string `json:"hash"`
-	Signature string `json:"Signature"`
+	SessionId  string   `json:"SessionId"`
+	From       string   `json:"from"`
+	To         string   `json:"to"`
+	Time       string   `json:"timeSent"`
+	Version    string   `json:"version"`
+	System     int      `json:"system"`
+	Value      string   `json:"value"`
+	HashString string   `json:"hashString"`
+	Hash       [32]byte `json:"hash"`
+	Signature  []byte   `json:"Signature"`
 }
 
+// confige db
 var db *sql.DB
 var cfg = mysql.Config{
 	User:                 "pingProgram",
@@ -38,6 +42,7 @@ var cfg = mysql.Config{
 	AllowNativePasswords: true,
 }
 
+// function for getting a user id, very handy indeed
 func GetUserId(user string) int {
 	var err error
 	db, err = sql.Open("mysql", cfg.FormatDSN())
@@ -67,6 +72,7 @@ func GetUserId(user string) int {
 	return rightId
 }
 
+// this function uploads data to the db
 func UploadMsg(message Msg) {
 	var err error
 	db, err = sql.Open("mysql", cfg.FormatDSN())
@@ -78,9 +84,9 @@ func UploadMsg(message Msg) {
 
 	hash := makeMsgDb(username)
 
-	insertSQL := fmt.Sprintf("INSERT INTO `%s` (`from`, `to`, `time`, `version`, `system`, `value`, `hash`, `signature`) VALUES (?, ?, ?, ?, ?, ?, ?);", hash)
+	insertSQL := fmt.Sprintf("INSERT INTO `%s` (`from`, `to`, `time`, `version`, `system`, `value`, `hash`, `signature`) VALUES (?, ?, ?, ?, ?, ?, ?, ?);", hash)
 
-	rows, err := db.Query(insertSQL, message.From, message.To, message.Time, message.Version, message.System, message.Value, message.Hash, message.Signature)
+	rows, err := db.Query(insertSQL, message.From, message.To, message.Time, message.Version, message.System, message.Value, message.HashString, message.Signature)
 	if err != nil {
 		fmt.Println(err)
 	}
@@ -89,6 +95,7 @@ func UploadMsg(message Msg) {
 
 }
 
+// this function makes a db per user to store the messages
 func makeMsgDb(user string) string {
 	var err error
 	db, err = sql.Open("mysql", cfg.FormatDSN())
@@ -101,7 +108,7 @@ func makeMsgDb(user string) string {
 	hashInBytes := hash.Sum(nil)
 	hashString := hex.EncodeToString(hashInBytes)
 
-	createSql := fmt.Sprintf("CREATE TABLE IF NOT EXISTS `%s`(`from` VARCHAR(256) NOT NULL, `to` VARCHAR(256) NOT NULL, `time` VARCHAR(30) NOT NULL, `version` VARCHAR(5) NOT NULL, `system` int NOT NULL, `value` TEXT NOT NULL, `hash` VARCHAR(512) NOT NULL);", hashString)
+	createSql := fmt.Sprintf("CREATE TABLE IF NOT EXISTS `%s` (`from` VARCHAR(256) NOT NULL, `to` VARCHAR(256) NOT NULL, `time` VARCHAR(30) NOT NULL, `version` VARCHAR(5) NOT NULL, `system` int NOT NULL, `value` TEXT NOT NULL, `hash` VARCHAR(512) NOT NULL, `signature` BLOB NOT NULL);", hashString)
 
 	rows, err := db.Query(createSql)
 	if err != nil {
@@ -113,6 +120,7 @@ func makeMsgDb(user string) string {
 	return hashString
 }
 
+// this function checks if there are any unread messages
 func CheckMsg(user string) bool {
 	var err error
 	db, err = sql.Open("mysql", cfg.FormatDSN())
@@ -146,6 +154,7 @@ func CheckMsg(user string) bool {
 	return false
 }
 
+// this function gets the messages from the database
 func GetMessage(user string) []Msg {
 	var err error
 	db, err = sql.Open("mysql", cfg.FormatDSN())
@@ -158,7 +167,7 @@ func GetMessage(user string) []Msg {
 	hashInBytes := hash.Sum(nil)
 	hashString := hex.EncodeToString(hashInBytes)
 
-	createSQL := fmt.Sprintf("SELECT `from`, `to`, `time`, `version`, `system`, `value`, `checksum` FROM %s", hashString)
+	createSQL := fmt.Sprintf("SELECT `from`, `to`, `time`, `version`, `system`, `value`, `hash`, `signature` FROM %s", hashString)
 
 	rows, err := db.Query(createSQL)
 	if err != nil {
@@ -171,15 +180,26 @@ func GetMessage(user string) []Msg {
 
 	for rows.Next() {
 		var currentMsg Msg
-		if err := rows.Scan(&currentMsg.From, &currentMsg.To, &currentMsg.Time, &currentMsg.Version, &currentMsg.System, &currentMsg.Value, &currentMsg.CheckSum); err != nil {
+		var hashBytes []byte
+		var hashString string
+
+		if err := rows.Scan(&currentMsg.From, &currentMsg.To, &currentMsg.Time, &currentMsg.Version, &currentMsg.System, &currentMsg.Value, &hashBytes, &currentMsg.Signature); err != nil {
 			log.Fatal("error while retreiving messages from db", err)
 		}
+
+		var hashArray [32]byte
+		copy(hashArray[:], hashBytes)
+		hashString = hex.EncodeToString(hashArray[:])
+		currentMsg.Hash = hashArray
+		currentMsg.HashString = hashString
+
 		messages = append(messages, currentMsg)
 	}
 
 	return messages
 }
 
+// this function deletes the messages it has read from the database
 func DeleteMsgs(user string) {
 	var err error
 	db, err = sql.Open("mysql", cfg.FormatDSN())
@@ -202,6 +222,7 @@ func DeleteMsgs(user string) {
 	defer rows.Close()
 }
 
+// this function upload the received public key to the databse
 func UploadPubKey(message Msg) {
 	hashFrom := sha256.New()
 	hashFrom.Write([]byte(message.From))
@@ -239,6 +260,7 @@ func UploadPubKey(message Msg) {
 
 }
 
+// this function checks if there alredy is a public key from a user
 func checkKey(hashString string) bool {
 	var err error
 	db, err = sql.Open("mysql", cfg.FormatDSN())
@@ -270,6 +292,7 @@ func checkKey(hashString string) bool {
 	}
 }
 
+// this function reaaaaaaly speks for itself
 func GetPubKey(hashString string) *rsa.PublicKey {
 	var err error
 	db, err = sql.Open("mysql", cfg.FormatDSN())

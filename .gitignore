@@ -1,0 +1,4 @@
+*.rsa
+*.pem
+*.cert
+*.pub

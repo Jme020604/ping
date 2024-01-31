@@ -1,3 +1,4 @@
+// this part of the program contains all the diffie hellmann key exchange features
 package diffie
 
 import (
@@ -6,6 +7,7 @@ import (
 	"math/big"
 )
 
+// this function generates the prime and teh ground number
 func GeneratePrime() (*big.Int, *big.Int, error) {
 	bitSize := 2048
 
@@ -19,6 +21,7 @@ func GeneratePrime() (*big.Int, *big.Int, error) {
 	return prime, g, nil
 }
 
+// this function generates the private key using the prime
 func GeneratePrivateKey(p *big.Int) *big.Int {
 	// Generate a private key in the range [2, p-2]
 	max := new(big.Int).Sub(p, big.NewInt(2))
@@ -34,11 +37,13 @@ func GeneratePrivateKey(p *big.Int) *big.Int {
 	return privateKey
 }
 
+// this function generate the private key
 func GeneratePublicKey(privateKey, p, g *big.Int) *big.Int {
 	publicKey := new(big.Int).Exp(g, privateKey, p)
 	return publicKey
 }
 
+// this function calculates the shared secret
 func CalcShareKey(otherPublicKey, privateKey, prime *big.Int) *big.Int {
 	result := new(big.Int).Exp(otherPublicKey, privateKey, prime)
 

@@ -1,3 +1,4 @@
+// this part of the program is for storing the session keys
 package keyStorage
 
 import (
@@ -56,28 +57,6 @@ func GetValueForKeyInBucket(dbPath, bucketName, key string) ([]byte, error) {
 	}
 
 	return value, nil
-}
-
-// Delete data from the BoltDB database
-func DeleteData(dbPath, bucketName, key string) error {
-	db, err := bolt.Open(dbPath, 0600, nil)
-	if err != nil {
-		return err
-	}
-	defer db.Close()
-
-	err = db.Update(func(tx *bolt.Tx) error {
-		bucket := tx.Bucket([]byte(bucketName))
-		if bucket == nil {
-			return nil
-		}
-
-		// Delete the key from the bucket
-		err := bucket.Delete([]byte(key))
-		return err
-	})
-
-	return err
 }
 
 func KeyExists(dbPath, bucketName, key string) bool {
